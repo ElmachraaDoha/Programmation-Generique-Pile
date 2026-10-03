@@ -1,0 +1,45 @@
+PILE GENERIQUE DANS UNE DLL
+===========================
+
+CE QUE CONTIENT LA DLL
+  Deux piles d'entiers (int) :
+    - PileListe   (liste chainee)
+    - PileTableau (tableau dynamique)
+  Fonctions (remplacer XXX par Liste ou Tableau) :
+    void*      creerPileXXX()                  cree une pile, renvoie son "numero"
+    void       empilerPileXXX(pile, valeur)    ajoute une valeur
+    int        depilerPileXXX(pile)            retire et renvoie la valeur du dessus
+    int        estVidePileXXX(pile)            1 si vide, 0 sinon
+    long long  compteurPileXXX(pile)           compteur d'operations
+    void       detruirePileXXX(pile)           libere la pile (obligatoire a la fin)
+
+  IMPORTANT : tester estVidePileXXX avant depilerPileXXX.
+
+1) CREER LA DLL (Code::Blocks)
+  - Ouvrir PileDLL.workspace
+  - Clic droit sur "PileGenerique" -> Build
+  - Resultat dans bin\Debug :
+        PileGenerique.dll        <- la DLL
+        libPileGenerique.a       <- pour lier un programme C++ (MinGW)
+        libPileGenerique.def     <- liste des fonctions exportees
+
+2) TESTER
+  - Clic droit sur "Exemple" -> Build and run
+  - Affichage attendu : 50 40 30 20 10 (deux fois), compteur liste = 5, compteur tableau = 9
+
+3) UTILISER LA DLL DANS UN AUTRE PROGRAMME C++
+  a) Copier PileDLL.h dans le projet.
+  b) Ecrire : #include "PileDLL.h"
+  c) Code::Blocks : Project -> Build options -> Linker settings -> Add : PileGenerique
+                    Search directories -> Linker -> Add : dossier contenant libPileGenerique.a
+  d) Mettre PileGenerique.dll a cote du .exe (sinon : "DLL introuvable").
+
+  Exemple minimal :
+      void* p = creerPileListe();
+      empilerPileListe(p, 42);
+      while (!estVidePileListe(p)) std::cout << depilerPileListe(p);
+      detruirePileListe(p);
+
+4) AUTRES LANGAGES (Python, C#...)
+  Les fonctions sont du C pur, donc utilisables par ces langages
+  (par exemple avec ctypes en Python). Il faut juste charger PileGenerique.dll.
