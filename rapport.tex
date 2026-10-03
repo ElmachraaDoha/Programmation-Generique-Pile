@@ -1,0 +1,422 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs,array,tabularx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+\emergencystretch=3em
+\setlength{\parskip}{3pt}
+
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{TP Piles génériques}
+\rhead{Doha El Machraa}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+%==========================================================================
+% Configuration du code
+%==========================================================================
+\definecolor{codebg}{RGB}{243,243,243}
+
+\lstset{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  columns=fullflexible,
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!40!black},
+  showstringspaces=false,
+  xleftmargin=2pt,
+  xrightmargin=2pt
+}
+
+%==========================================================================
+\title{
+\textbf{RAPPORT DE TRAVAUX PRATIQUES}\\[4pt]
+\large Piles génériques, complexité et bibliothèque dynamique (DLL)
+}
+\author{Doha El Machraa\\ Module : Programmation Objet Avancée}
+\date{28/09/2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+
+%==========================================================================
+\section{Introduction générale}
+%==========================================================================
+
+Ce rapport présente le travail réalisé dans le cadre du TP sur la programmation générique en C++ (patrons de classes, \emph{templates}). Il comporte trois parties :
+\begin{enumerate}[nosep]
+    \item une pile générique implémentée de deux façons (tableau dynamique et liste chaînée), comparée par des mesures de temps, par un compteur d'opérations et par un calcul exact du coût ;
+    \item une application : la vérification de l'appariement des délimiteurs d'une expression mathématique ;
+    \item l'intégration de la pile dans une bibliothèque dynamique (DLL), utilisable par d'autres programmes.
+\end{enumerate}
+
+Le code source est disponible sur GitHub : \url{https://github.com/ElmachraaDoha/Programmation-Generique-Pile}.
+
+%==========================================================================
+\section{Partie 1 --- Pile générique}
+%==========================================================================
+
+\subsection{Problématique}
+
+Une pile est une structure de données LIFO (\emph{Last In, First Out}) : le dernier élément empilé est le premier dépilé. Il s'agit de concevoir une pile générique, c'est-à-dire une classe unique valable pour tout type de données, selon deux approches : un tableau dynamique et une liste chaînée. Les deux offrent les mêmes opérations, mais leur comportement lors de l'ajout d'éléments diffère.
+
+%--------------------------------------------------------------------------
+\subsection{Généricité et interface commune}
+
+La généricité est obtenue grâce aux patrons de classes :
+
+\begin{lstlisting}
+template <class T>
+class PileTableau { /* ... */ };
+
+PileTableau<int>    pileEntiers;
+PileTableau<string> pileChaines;
+\end{lstlisting}
+
+Le type \texttt{T} est remplacé lors de l'instanciation. Le même principe est appliqué à \texttt{PileListe}. Les deux classes exposent la même interface :
+
+\begin{itemize}[nosep]
+    \item \texttt{empiler(valeur)} : ajoute un élément au sommet ;
+    \item \texttt{depiler()} : retire et retourne l'élément du sommet ;
+    \item \texttt{sommet()} : retourne le sommet sans le supprimer ;
+    \item \texttt{estVide()} et \texttt{getTaille()} ;
+    \item \texttt{getCompteur()} : nombre d'opérations élémentaires comptabilisées (voir section~\ref{sec:compteur}).
+\end{itemize}
+
+%--------------------------------------------------------------------------
+\subsection{Implémentation par tableau dynamique}
+
+Les éléments sont stockés dans un tableau alloué dynamiquement. La classe contient un pointeur vers le tableau, sa capacité (initialement \textbf{4}) et la taille de la pile. Lorsque le tableau est plein, \texttt{agrandir()} \textbf{double} la capacité et recopie les éléments :
+
+\begin{lstlisting}
+void agrandir()
+{
+    int nouvelleCapacite = capacite * 2;
+    T* nouveauTableau = new T[nouvelleCapacite];
+
+    for (int i = 0; i < taille; i++)
+        nouveauTableau[i] = tableau[i];
+
+    delete[] tableau;
+    tableau = nouveauTableau;
+    capacite = nouvelleCapacite;
+}
+\end{lstlisting}
+
+En général, \texttt{empiler()} écrit simplement la valeur dans la case \texttt{tableau[taille]}. Mais l'appel qui trouve le tableau plein doit recopier tous les éléments : son coût est proportionnel à la taille de la pile.
+
+%--------------------------------------------------------------------------
+\subsection{Implémentation par liste chaînée}
+
+Chaque élément est stocké dans un nœud (valeur + pointeur vers le suivant) ; le sommet de la pile est le premier nœud :
+
+\begin{lstlisting}
+void empiler(const T& valeur)
+{
+    sommetPile = new Noeud(valeur, sommetPile);
+    taille++;
+}
+\end{lstlisting}
+
+Le coût ne dépend pas du nombre d'éléments déjà présents. Le dépilage supprime le premier nœud et déplace le pointeur du sommet.
+
+\subsection{Gestion de la mémoire et des erreurs}
+
+Le destructeur du tableau utilise \texttt{delete[]} ; celui de la liste supprime les nœuds un à un. Les opérations \texttt{depiler()} et \texttt{sommet()} lèvent une exception \texttt{std::runtime\_error} si la pile est vide, ce qui évite tout accès invalide.
+
+%--------------------------------------------------------------------------
+\subsection{Comparaison théorique}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+\textbf{Critère} & \textbf{Tableau dynamique} & \textbf{Liste chaînée} \\
+\midrule
+Empiler & $O(1)$ amorti ; $O(n)$ lors d'un redimensionnement & $O(1)$ garanti \\
+Dépiler, sommet & $O(1)$ & $O(1)$ \\
+Mémoire & Stockage contigu, capacité $\geq$ taille & Un nœud et un pointeur par élément \\
+Allocation & Globale, avec recopie à chaque doublement & Individuelle, un \texttt{new} par élément \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+%==========================================================================
+\subsection{Mesure expérimentale des temps d'exécution}
+%==========================================================================
+
+\paragraph{Protocole.} Le temps est mesuré avec \texttt{<chrono>}. Pour chaque structure : on crée une pile vide, on empile $N$ entiers (temps mesuré), puis on les dépile (temps mesuré). On utilise $N \in \{10^3, 10^4, 10^5, 10^6\}$ ; chaque mesure est répétée cinq fois et la moyenne est calculée. Le même code générique sert aux deux piles. Les mesures ont été faites sous Windows avec Code\string:\string:Blocks et GCC, en configuration Debug (sans optimisation) : les valeurs absolues dépendent de la machine, seules les évolutions et les écarts relatifs importent.
+
+\paragraph{Résultats} (temps moyens en millisecondes) :
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+$N$ & Tableau : empiler & Tableau : dépiler & Liste : empiler & Liste : dépiler \\
+\midrule
+1\,000     & 0,020  & 0,006 & 0,114  & 0,039 \\
+10\,000    & 0,176  & 0,058 & 0,738  & 0,422 \\
+100\,000   & 1,691  & 0,701 & 8,547  & 5,404 \\
+1\,000\,000 & 11,416 & 6,887 & 86,951 & 52,372 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Analyse.} Les temps augmentent avec $N$ pour les deux structures, de façon compatible avec un coût moyen constant par opération. Le facteur n'est pas exactement 10 quand $N$ est multiplié par 10 (par exemple $\times 6{,}75$ pour l'empilage du tableau entre $10^5$ et $10^6$) : coût fixe de la mesure, allocateur mémoire et cache du processeur interviennent.
+
+Pour $N=10^6$, l'empilage coûte environ 11,4~ns par élément pour le tableau contre 87,0~ns pour la liste ; le dépilage 6,9~ns contre 52,4~ns. La liste est donc plus lente, bien que sa complexité théorique soit égale ou meilleure : chaque \texttt{empiler()} fait un \texttt{new} et chaque \texttt{depiler()} un \texttt{delete}, opérations coûteuses, alors que le tableau écrit dans une case déjà allouée, de façon contiguë en mémoire (favorable au cache). Une même complexité asymptotique n'implique donc pas les mêmes performances pratiques. Ces mesures ne prouvent cependant pas une complexité : c'est l'objet des deux sections suivantes.
+
+%==========================================================================
+\subsection{Mesure de la complexité par un compteur d'opérations}\label{sec:compteur}
+%==========================================================================
+
+Les temps dépendent de la machine ; on ajoute donc aux deux classes un compteur indépendant du processeur, qui ne concerne que \texttt{empiler()} :
+
+\begin{itemize}[nosep]
+    \item \textbf{tableau} : $+1$ pour l'écriture du nouvel élément, et $+1$ pour chaque élément recopié lors d'un \texttt{agrandir()} ;
+    \item \textbf{liste} : $+1$ pour la création de chaque nœud.
+\end{itemize}
+
+Le programme relève le total, le rapport \emph{total}$/N$ et le coût du \emph{pire appel} individuel.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}r rrr rrr@{}}
+\toprule
+& \multicolumn{3}{c}{Tableau : empiler} & \multicolumn{3}{c}{Liste : empiler} \\
+\cmidrule(lr){2-4}\cmidrule(l){5-7}
+$N$ & total & total/$N$ & pire appel & total & total/$N$ & pire appel \\
+\midrule
+1\,000      & 2\,020     & 2,020 & 513     & 1\,000     & 1,000 & 1 \\
+10\,000     & 26\,380    & 2,638 & 8\,193  & 10\,000    & 1,000 & 1 \\
+100\,000    & 231\,068   & 2,311 & 65\,537 & 100\,000   & 1,000 & 1 \\
+1\,000\,000 & 2\,048\,572 & 2,049 & 524\,289 & 1\,000\,000 & 1,000 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Liste.} Le total vaut exactement $N$ et le pire appel vaut 1 : chaque empilage crée un seul nœud quelle que soit la taille de la pile. C'est un $O(1)$ \emph{garanti}.
+
+\textbf{Tableau.} Le rapport \emph{total}$/N$ reste borné ($2{,}02$ ; $2{,}64$ ; $2{,}31$ ; $2{,}05$) : le coût moyen par empilage est constant, c'est un $O(1)$ \emph{amorti}. En revanche, le pire appel croît avec $N$ (513, 8\,193, 65\,537, 524\,289) : ce sont les appels qui déclenchent un redimensionnement, de coût $O(n)$.
+
+%==========================================================================
+\subsection{Calcul exact du coût de l'empilage dans le tableau}\label{sec:calcul}
+%==========================================================================
+
+Les valeurs du compteur ne sont pas des coïncidences : elles se calculent exactement. Notons $c_0=4$ la capacité initiale.
+
+\paragraph{Redimensionnements.} Le tableau est agrandi quand on empile l'élément numéro $c_0 2^{j-1}+1$ ($j=1,2,\dots$) ; l'appel recopie alors $c_0 2^{j-1}$ éléments. Pour empiler $N$ éléments, le nombre de redimensionnements est
+\[
+k=\left\lceil \log_2\frac{N}{c_0}\right\rceil .
+\]
+
+\paragraph{Nombre total de copies.} C'est une somme géométrique :
+\[
+S(N)=\sum_{j=1}^{k} c_0\,2^{j-1}=c_0\,(2^{k}-1).
+\]
+
+\paragraph{Coût total.} Chaque empilage compte 1 pour l'écriture, donc
+\[
+T(N)=N+S(N)=N+c_0\,(2^{k}-1).
+\]
+
+\paragraph{Borne amortie.} Par définition de $k$, on a $c_0 2^{k-1}<N\le c_0 2^{k}$, donc $c_0 2^{k}<2N$ et $S(N)<2N$. Ainsi
+\[
+N<T(N)<3N \quad\Longrightarrow\quad \frac{T(N)}{N}<3 .
+\]
+Le coût amorti d'un empilage est borné par la constante 3 : l'opération est bien en $O(1)$ amorti. (Intuitivement, chaque élément « paie d'avance » sa propre recopie, et celle d'un autre élément, lors des doublements suivants.)
+
+\paragraph{Pire appel.} Le pire appel est le dernier redimensionnement : il coûte $1+c_0 2^{k-1}$, et comme $N/2\le c_0 2^{k-1}<N$, ce coût est compris entre $N/2$ et $N$ : il est en $\Theta(N)$.
+
+\paragraph{Vérification.}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}rrrrrr@{}}
+\toprule
+$N$ & $k$ & $S(N)=4(2^k-1)$ & $T(N)=N+S(N)$ & $T(N)/N$ & pire appel $1+4\cdot 2^{k-1}$ \\
+\midrule
+1\,000      & 8  & 1\,020     & 2\,020      & 2,020 & 513 \\
+10\,000     & 12 & 16\,380    & 26\,380     & 2,638 & 8\,193 \\
+100\,000    & 15 & 131\,068   & 231\,068    & 2,311 & 65\,537 \\
+1\,000\,000 & 18 & 1\,048\,572 & 2\,048\,572 & 2,049 & 524\,289 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les valeurs théoriques coïncident \emph{exactement} avec celles mesurées par le compteur. Le rapport $T(N)/N$ oscille entre 2 et 3 selon la position de $N$ par rapport à la dernière puissance de deux : il est maximal juste après un doublement (cas de $N=10\,000$, juste après 8\,192) et minimal juste avant le suivant. Pour la liste, $T(N)=N$ exactement.
+
+%==========================================================================
+\section{Partie 2 --- Vérification d'une expression mathématique}
+%==========================================================================
+
+\subsection{Problématique et principe}
+
+Il s'agit de déterminer si les délimiteurs \texttt{( )}, \texttt{[ ]} et \texttt{\{ \}} d'une expression sont correctement appariés : chaque ouvrant doit avoir un fermant correspondant, dans le bon ordre d'imbrication. Par exemple \texttt{(x+y)*5} est valide, alors que \texttt{(x+y]} ne l'est pas.
+
+La pile est adaptée car le dernier délimiteur ouvert doit être le premier fermé. On parcourt l'expression de gauche à droite : un ouvrant est empilé ; pour un fermant, on vérifie que la pile n'est pas vide, on dépile et on contrôle que les deux délimiteurs se correspondent ; les autres caractères sont ignorés. À la fin, la pile doit être vide. La pile utilisée est \texttt{PileListe<char>} : c'est la classe de la partie~1, réutilisée sans modification avec un autre type, ce qui illustre la généricité.
+
+\begin{lstlisting}
+bool verifierExpression(const string& expr, string& message)
+{
+    PileListe<char> pile;
+    for (size_t i = 0; i < expr.size(); i++)
+    {
+        char c = expr[i];
+        if (c == '(' || c == '[' || c == '{')
+            pile.empiler(c);
+        else if (c == ')' || c == ']' || c == '}')
+        {
+            if (pile.estVide()) { message = "fermant sans ouvrant"; return false; }
+            char o = pile.depiler();
+            bool ok = (o=='(' && c==')') || (o=='[' && c==']') || (o=='{' && c=='}');
+            if (!ok) { message = "delimiteurs non correspondants"; return false; }
+        }
+    }
+    if (!pile.estVide()) { message = "ouvrant jamais ferme"; return false; }
+    message = "expression valide";
+    return true;
+}
+\end{lstlisting}
+
+\subsection{Résultats des tests}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+\textbf{Expression} & \textbf{Résultat} & \textbf{Explication} \\
+\midrule
+\texttt{\{(x+y)+z)*5} & INVALIDE & Le second \texttt{)} rencontre \texttt{\{} au sommet : pas de correspondance \\
+\texttt{(x+y)*5}      & VALIDE   & Délimiteurs correctement appariés \\
+\texttt{[a+(b*c)]-d}  & VALIDE   & Imbrication correcte \\
+\texttt{\{[()]\}}     & VALIDE   & Trois types imbriqués correctement \\
+\texttt{(x+y}         & INVALIDE & \texttt{(} n'est jamais fermé (pile non vide à la fin) \\
+\texttt{(a+b]}        & INVALIDE & \texttt{]} ne correspond pas à \texttt{(} \\
+\texttt{)x+y(}        & INVALIDE & Fermant sans ouvrant (pile vide) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Cas de l'énoncé : \texttt{\{(x+y)+z)*5}.} Le \texttt{\{} puis le \texttt{(} sont empilés ; le premier \texttt{)} dépile \texttt{(} (correct) ; le second \texttt{)} trouve \texttt{\{} au sommet, qui ne lui correspond pas : l'expression est invalide. Ce test montre qu'il ne suffit pas de comparer le \emph{nombre} d'ouvrants et de fermants : leur ordre et leur type comptent.
+
+%==========================================================================
+\section{Partie 3 --- Intégration dans une bibliothèque dynamique (DLL)}
+%==========================================================================
+
+\subsection{Objectif et choix de conception}
+
+Une DLL (\emph{Dynamic-Link Library}) est une bibliothèque compilée, chargée à l'exécution et réutilisable par plusieurs programmes sans recompiler le code de la pile. Deux contraintes déterminent la conception :
+
+\begin{itemize}[nosep]
+    \item \textbf{Un patron n'est pas exportable.} \texttt{template <class T>} n'est qu'un modèle : aucun code n'existe tant que \texttt{T} n'est pas fixé. La DLL expose donc des instances concrètes : \texttt{PileListe<int>} et \texttt{PileTableau<int>}.
+    \item \textbf{Les classes C++ ne sont pas portables entre compilateurs} (noms décorés, ABI). On expose donc une \textbf{interface C} : \texttt{extern "C"} supprime la décoration des noms, et chaque pile est manipulée par un pointeur opaque \texttt{void*}.
+\end{itemize}
+
+\subsection{Interface exportée}
+
+La DLL est composée de quatre fichiers : \texttt{PileListe.h}, \texttt{PileTableau.h}, \texttt{PileDLL.h} (déclarations partagées avec les clients) et \texttt{PileDLL.cpp} (implémentation). Une macro choisit \texttt{\_\_declspec(dllexport)} pour la compilation de la DLL (symbole \texttt{PILEDLL\_BUILD}) et \texttt{\_\_declspec(dllimport)} pour les clients :
+
+\begin{lstlisting}
+#ifdef PILEDLL_BUILD
+    #define PILE_API __declspec(dllexport)
+#else
+    #define PILE_API __declspec(dllimport)
+#endif
+
+extern "C" {
+PILE_API void*     creerPileListe();
+PILE_API void      empilerPileListe(void* pile, int valeur);
+PILE_API int       depilerPileListe(void* pile);
+PILE_API int       estVidePileListe(void* pile);
+PILE_API long long compteurPileListe(void* pile);
+PILE_API void      detruirePileListe(void* pile);
+/* idem avec le suffixe Tableau */
+}
+\end{lstlisting}
+
+Chaque fonction est un simple adaptateur vers la classe patron, par exemple :
+
+\begin{lstlisting}
+void* creerPileListe()                 { return new PileListe<int>(); }
+void  empilerPileListe(void* p, int v)
+{
+    static_cast<PileListe<int>*>(p)->empiler(v);
+}
+void  detruirePileListe(void* p)       { delete static_cast<PileListe<int>*>(p); }
+\end{lstlisting}
+
+La DLL exporte 12 fonctions : \texttt{creer}, \texttt{empiler}, \texttt{depiler}, \texttt{estVide}, \texttt{compteur} et \texttt{detruire}, pour chacune des deux piles.
+
+\subsection{Compilation et test}
+
+Dans Code\string:\string:Blocks, le projet \texttt{PileGenerique.cbp} est de type \emph{Dynamic Link Library}, compilé avec l'option \texttt{-DPILEDLL\_BUILD}. Il produit dans \texttt{bin/Debug} : \texttt{PileGenerique.dll} (le code), \texttt{libPileGenerique.a} (bibliothèque d'import pour l'édition de liens des clients) et \texttt{libPileGenerique.def} (liste des fonctions exportées).
+
+Un second projet, \texttt{Exemple.cbp}, est un programme client : il inclut \texttt{PileDLL.h}, se lie avec \texttt{PileGenerique} (option \texttt{-lPileGenerique}) et doit trouver \texttt{PileGenerique.dll} à côté de son exécutable (liaison implicite). Il empile 10, 20, 30, 40, 50 dans chaque pile, puis dépile jusqu'à ce qu'elle soit vide :
+
+\begin{lstlisting}
+liste   : 50 40 30 20 10
+tableau : 50 40 30 20 10
+compteur liste   = 5
+compteur tableau = 9
+\end{lstlisting}
+
+L'ordre LIFO est respecté. Le compteur de la liste vaut 5 (un nœud par élément) ; celui du tableau vaut 9 : 5 écritures plus 4 recopies lors du passage de la capacité 4 à 8, ce qui est cohérent avec la formule de la section~\ref{sec:calcul} ($N=5$, $k=1$, $S=4$, $T=9$).
+
+\subsection{Utilisation dans un autre programme}
+
+Pour utiliser la pile dans un autre programme C++, il suffit de copier \texttt{PileDLL.h}, de l'inclure, de lier avec \texttt{PileGenerique} et de placer la DLL à côté de l'exécutable :
+
+\begin{lstlisting}
+void* p = creerPileListe();
+empilerPileListe(p, 42);
+while (!estVidePileListe(p))
+    cout << depilerPileListe(p);
+detruirePileListe(p);
+\end{lstlisting}
+
+Comme l'interface est en C pur, la DLL peut aussi être appelée depuis d'autres langages (Python avec \texttt{ctypes}, C\#, \dots).
+
+\subsection{Limites et précautions}
+
+\begin{itemize}[nosep]
+    \item chaque \texttt{creer} doit être suivi d'un \texttt{detruire}, sinon la mémoire fuit ;
+    \item \texttt{depiler} lève une exception C++ si la pile est vide, et une exception ne doit pas traverser la frontière d'une DLL : le client doit tester \texttt{estVide} avant chaque dépilage (c'est la raison de cette fonction exportée) ;
+    \item la DLL ne propose que le type \texttt{int} ; chaque type supplémentaire demanderait une instanciation et des fonctions d'export dédiées.
+\end{itemize}
+
+%==========================================================================
+\section{Conclusion générale}
+%==========================================================================
+
+Ce TP a permis de mettre en pratique les patrons de classes, la gestion de la mémoire dynamique et la construction d'une bibliothèque dynamique.
+
+La liste chaînée garantit un empilage en $O(1)$ ; le tableau dynamique en $O(1)$ \emph{amorti} : son coût total vaut exactement $T(N)=N+4(2^k-1)<3N$, tandis que son pire appel est $\Theta(N)$. Ce calcul coïncide avec les valeurs du compteur d'opérations. Les mesures de temps montrent que, dans nos conditions d'exécution, le tableau est nettement plus rapide que la liste (allocations individuelles des nœuds, contiguïté mémoire) : à complexité comparable, les performances pratiques peuvent différer fortement.
+
+La vérification des délimiteurs a illustré l'intérêt de la généricité : \texttt{PileListe<char>} réutilise sans modification la classe écrite pour les entiers. Enfin, la DLL rend les deux piles utilisables par d'autres programmes, au prix d'une interface C et d'une instanciation limitée au type \texttt{int}.
+
+Une extension possible serait de valider une expression complète (opérateurs, priorités) ou de la convertir en notation postfixée.
+
+%==========================================================================
+
+\end{document}
